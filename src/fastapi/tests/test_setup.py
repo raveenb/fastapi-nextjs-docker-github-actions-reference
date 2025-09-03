@@ -9,5 +9,5 @@ def test_project_setup():
 def test_python_version():
     """Test that we're using the correct Python version."""
     import sys
-    
+
     assert sys.version_info >= (3, 11), "Python 3.11+ is required"
