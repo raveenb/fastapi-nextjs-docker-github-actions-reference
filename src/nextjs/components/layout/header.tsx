@@ -16,6 +16,9 @@ export function Header() {
           <Link href="/dashboard" className="text-sm font-medium hover:text-primary">
             Dashboard
           </Link>
+          <Link href="/api-test" className="text-sm font-medium hover:text-primary">
+            API Test
+          </Link>
           <Link href="/api-docs" className="text-sm font-medium hover:text-primary">
             API Docs
           </Link>
