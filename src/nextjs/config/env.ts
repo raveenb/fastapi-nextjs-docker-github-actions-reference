@@ -2,8 +2,8 @@ import { z } from "zod";
 
 // Environment variable schema
 const envSchema = z.object({
-  // Required
-  NEXT_PUBLIC_API_URL: z.string().url(),
+  // API URL with default fallback
+  NEXT_PUBLIC_API_URL: z.string().url().optional().default("http://localhost:8000"),
   
   // Optional with defaults
   NEXT_PUBLIC_APP_NAME: z.string().optional().default("FastAPI Next.js Reference"),
