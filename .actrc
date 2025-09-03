@@ -1,0 +1,19 @@
+# Act configuration for local GitHub Actions testing
+# https://github.com/nektos/act
+
+# Use medium sized runner images by default
+-P ubuntu-latest=catthehacker/ubuntu:act-latest
+-P ubuntu-22.04=catthehacker/ubuntu:act-22.04
+-P ubuntu-20.04=catthehacker/ubuntu:act-20.04
+
+# Default workflow to run
+--workflows .github/workflows/ci.yml
+
+# Reuse containers between runs for faster iteration
+--reuse
+
+# Use docker host network
+--network host
+
+# Verbose output
+--verbose
