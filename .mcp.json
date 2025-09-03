@@ -1,0 +1,37 @@
+{
+  "mcpServers": {
+    "memory-bank": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-memory-bank",
+        "--context-dir",
+        ".memory-bank"
+      ],
+      "env": {
+        "MEMORY_BANK_PATH": ".memory-bank"
+      }
+    },
+    "sequential-thinking": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+    },
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest"]
+    },
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@context7/mcp-server"]
+    },
+    "context": {
+      "command": "npx",
+      "args": ["-y", "@context/mcp-server"],
+      "env": {
+        "CONTEXT_SERVER_MODE": "development",
+        "CONTEXT_PROJECT_ROOT": ".",
+        "CONTEXT_MEMORY_PATH": ".memory-bank"
+      }
+    }
+  }
+}
