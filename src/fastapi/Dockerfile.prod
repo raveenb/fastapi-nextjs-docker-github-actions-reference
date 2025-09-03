@@ -1,0 +1,119 @@
+# Production Dockerfile with advanced optimizations
+# Stage 1: Build stage
+FROM python:3.12-slim AS builder
+
+# Build arguments
+ARG BUILD_DATE
+ARG VCS_REF
+ARG VERSION=0.1.0
+
+# Labels
+LABEL org.opencontainers.image.created=$BUILD_DATE \
+      org.opencontainers.image.authors="FastAPI Reference Team" \
+      org.opencontainers.image.url="https://github.com/raveenb/fastapi-nextjs-docker-github-actions-reference" \
+      org.opencontainers.image.source="https://github.com/raveenb/fastapi-nextjs-docker-github-actions-reference" \
+      org.opencontainers.image.version=$VERSION \
+      org.opencontainers.image.revision=$VCS_REF \
+      org.opencontainers.image.vendor="FastAPI Reference" \
+      org.opencontainers.image.title="FastAPI Backend" \
+      org.opencontainers.image.description="Production-ready FastAPI backend with best practices"
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    gcc \
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv for faster package management
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+# Enable bytecode compilation and optimization
+ENV UV_COMPILE_BYTECODE=1 \
+    PYTHONOPTIMIZE=1
+
+# Copy and install dependencies
+COPY pyproject.toml README.md ./
+RUN uv venv /opt/venv && \
+    . /opt/venv/bin/activate && \
+    uv pip install --no-cache -e . && \
+    uv pip install --no-cache gunicorn
+
+# Copy application
+COPY app app
+
+# Compile Python files for faster startup
+RUN python -m compileall -b app/
+
+# Stage 2: Runtime stage
+FROM python:3.12-slim
+
+# Install runtime dependencies and security updates
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    curl \
+    ca-certificates \
+    && apt-get upgrade -y \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /root/.cache
+
+# Create non-root user
+RUN groupadd -r fastapi --gid=1000 && \
+    useradd -r -g fastapi --uid=1000 \
+    --home-dir=/home/fastapi \
+    --shell=/bin/bash \
+    --create-home fastapi
+
+WORKDIR /app
+
+# Copy virtual environment
+COPY --from=builder --chown=fastapi:fastapi /opt/venv /opt/venv
+
+# Copy compiled application
+COPY --from=builder --chown=fastapi:fastapi /app .
+
+# Set environment variables
+ENV PATH="/opt/venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app \
+    PYTHONOPTIMIZE=1 \
+    ENVIRONMENT=production \
+    HOST=0.0.0.0 \
+    PORT=8000 \
+    WORKERS=4
+
+# Create necessary directories
+RUN mkdir -p /app/logs /app/tmp && \
+    chown -R fastapi:fastapi /app/logs /app/tmp && \
+    chmod 755 /app/logs /app/tmp
+
+# Security: Remove unnecessary files and set permissions
+RUN find /app -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true && \
+    find /app -type f -name "*.py" -exec chmod 444 {} + && \
+    find /app -type f -name "*.pyc" -exec chmod 444 {} +
+
+# Switch to non-root user
+USER fastapi
+
+# Expose port
+EXPOSE 8000
+
+# Health check with more robust checking
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=5 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health').read()" || exit 1
+
+# Use gunicorn for production with multiple workers
+CMD ["gunicorn", "app.main:app", \
+     "--worker-class", "uvicorn.workers.UvicornWorker", \
+     "--workers", "4", \
+     "--bind", "0.0.0.0:8000", \
+     "--access-logfile", "-", \
+     "--error-logfile", "-", \
+     "--log-level", "info", \
+     "--timeout", "120", \
+     "--keep-alive", "5", \
+     "--max-requests", "1000", \
+     "--max-requests-jitter", "50"]
