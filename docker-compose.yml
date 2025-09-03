@@ -1,0 +1,118 @@
+services:
+  # FastAPI Backend Service
+  backend:
+    build:
+      context: ./src/fastapi
+      dockerfile: Dockerfile
+      args:
+        BUILD_DATE: ${BUILD_DATE:-}
+        VCS_REF: ${VCS_REF:-}
+        VERSION: ${VERSION:-0.1.0}
+    container_name: fastapi-backend
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - DEBUG=${DEBUG:-true}
+      - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
+      - PROJECT_NAME=${PROJECT_NAME:-FastAPI Reference}
+      - PROJECT_VERSION=${PROJECT_VERSION:-0.1.0}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+      - FEATURE_API_DOCS=${FEATURE_API_DOCS:-true}
+      - FEATURE_USER_REGISTRATION=${FEATURE_USER_REGISTRATION:-true}
+      - FEATURE_RATE_LIMITING=${FEATURE_RATE_LIMITING:-false}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - ./src/fastapi/app:/app/app:ro
+      - backend-logs:/app/logs
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health').read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  # Next.js Frontend Service
+  frontend:
+    build:
+      context: ./src/nextjs
+      dockerfile: Dockerfile
+      args:
+        BUILD_DATE: ${BUILD_DATE:-}
+        VCS_REF: ${VCS_REF:-}
+        VERSION: ${VERSION:-0.1.0}
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    container_name: nextjs-frontend
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      - NEXT_TELEMETRY_DISABLED=1
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health.json', (res) => { process.exit(res.statusCode === 200 ? 0 : 1); });"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
+  # Development-specific services
+  # Uncomment for development with hot reload
+  # backend-dev:
+  #   build:
+  #     context: ./src/fastapi
+  #     dockerfile: Dockerfile.dev
+  #   container_name: fastapi-backend-dev
+  #   ports:
+  #     - "${BACKEND_PORT:-8000}:8000"
+  #   environment:
+  #     - ENVIRONMENT=development
+  #     - DEBUG=true
+  #     - RELOAD=true
+  #   volumes:
+  #     - ./src/fastapi:/app
+  #     - backend-dev-cache:/app/.cache
+  #   networks:
+  #     - app-network
+  #   restart: unless-stopped
+
+  # frontend-dev:
+  #   build:
+  #     context: ./src/nextjs
+  #     dockerfile: Dockerfile.dev
+  #   container_name: nextjs-frontend-dev
+  #   ports:
+  #     - "${FRONTEND_PORT:-3000}:3000"
+  #   environment:
+  #     - NODE_ENV=development
+  #     - NEXT_PUBLIC_API_URL=http://localhost:8000
+  #     - WATCHPACK_POLLING=true
+  #   volumes:
+  #     - ./src/nextjs:/app
+  #     - /app/node_modules
+  #     - /app/.next
+  #   depends_on:
+  #     - backend-dev
+  #   networks:
+  #     - app-network
+  #   restart: unless-stopped
+
+networks:
+  app-network:
+    driver: bridge
+    name: fastapi-nextjs-network
+
+volumes:
+  backend-logs:
+    driver: local
+  backend-dev-cache:
+    driver: local
