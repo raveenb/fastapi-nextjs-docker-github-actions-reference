@@ -1,4 +1,28 @@
 services:
+  # PostgreSQL Database Service (Development)
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres-db-dev
+    restart: unless-stopped
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-fastapi_dev}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-fastapi_dev_password}
+      - POSTGRES_DB=${POSTGRES_DB:-fastapi_dev_db}
+      - POSTGRES_HOST_AUTH_METHOD=trust  # Less secure for dev
+    volumes:
+      - postgres-data-dev:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-fastapi_dev} -d ${POSTGRES_DB:-fastapi_dev_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
   # FastAPI Backend Service (Development)
   backend:
     build:
@@ -20,6 +44,10 @@ services:
       - FEATURE_RATE_LIMITING=false
       - LOG_LEVEL=DEBUG
       - PYTHONUNBUFFERED=1
+      - DATABASE_URL=${DATABASE_URL:-postgresql://fastapi_dev:fastapi_dev_password@postgres:5432/fastapi_dev_db}
+    depends_on:
+      postgres:
+        condition: service_healthy
     volumes:
       - ./src/fastapi:/app
       - backend-cache:/app/.cache
@@ -71,6 +99,8 @@ networks:
     name: fastapi-nextjs-network-dev
 
 volumes:
+  postgres-data-dev:
+    driver: local
   backend-cache:
     driver: local
   backend-venv:
