@@ -15,6 +15,10 @@ const ToastContext = createContext<ToastContextType | undefined>(undefined);
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
+  const removeNotification = useCallback((id: string) => {
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+  }, []);
+
   const addNotification = useCallback((notification: Omit<Notification, "id">) => {
     const id = Math.random().toString(36).substring(2, 9);
     const newNotification: Notification = {
@@ -31,11 +35,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         removeNotification(id);
       }, newNotification.duration);
     }
-  }, []);
-
-  const removeNotification = useCallback((id: string) => {
-    setNotifications((prev) => prev.filter((n) => n.id !== id));
-  }, []);
+  }, [removeNotification]);
 
   const clearNotifications = useCallback(() => {
     setNotifications([]);

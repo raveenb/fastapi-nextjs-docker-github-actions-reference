@@ -1,0 +1,100 @@
+name: Docker Local Registry
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        default: 'setup'
+        type: choice
+        options:
+          - setup
+          - push
+          - pull
+          - cleanup
+      registry_port:
+        description: 'Local registry port'
+        required: false
+        default: '5000'
+
+env:
+  LOCAL_REGISTRY: localhost:${{ inputs.registry_port }}
+  IMAGE_NAME_BACKEND: fastapi-nextjs-backend
+  IMAGE_NAME_FRONTEND: fastapi-nextjs-frontend
+
+jobs:
+  local-registry:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Local Registry
+        if: inputs.action == 'setup'
+        run: |
+          # Start local registry
+          docker run -d \
+            --restart=always \
+            --name registry \
+            -p ${{ inputs.registry_port }}:5000 \
+            registry:2
+          
+          # Wait for registry to be ready
+          sleep 5
+          
+          # Test registry
+          curl -X GET http://localhost:${{ inputs.registry_port }}/v2/_catalog
+          
+          echo "## Local Registry Setup Complete" >> $GITHUB_STEP_SUMMARY
+          echo "Registry is running at: localhost:${{ inputs.registry_port }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "1. Build and tag your images:" >> $GITHUB_STEP_SUMMARY
+          echo "   \`docker build -t localhost:${{ inputs.registry_port }}/backend:latest ./backend\`" >> $GITHUB_STEP_SUMMARY
+          echo "2. Push to local registry:" >> $GITHUB_STEP_SUMMARY
+          echo "   \`docker push localhost:${{ inputs.registry_port }}/backend:latest\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Push to Local Registry
+        if: inputs.action == 'push'
+        run: |
+          # Build backend
+          docker build -t ${{ env.LOCAL_REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:latest ./src/fastapi
+          docker push ${{ env.LOCAL_REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:latest
+          
+          # Build frontend
+          docker build -t ${{ env.LOCAL_REGISTRY }}/${{ env.IMAGE_NAME_FRONTEND }}:latest ./src/nextjs
+          docker push ${{ env.LOCAL_REGISTRY }}/${{ env.IMAGE_NAME_FRONTEND }}:latest
+          
+          # List images in registry
+          echo "## Images in Local Registry" >> $GITHUB_STEP_SUMMARY
+          curl -X GET http://localhost:${{ inputs.registry_port }}/v2/_catalog | jq '.' >> $GITHUB_STEP_SUMMARY
+
+      - name: Pull from Local Registry
+        if: inputs.action == 'pull'
+        run: |
+          # Pull images
+          docker pull ${{ env.LOCAL_REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:latest
+          docker pull ${{ env.LOCAL_REGISTRY }}/${{ env.IMAGE_NAME_FRONTEND }}:latest
+          
+          # Tag for local use
+          docker tag ${{ env.LOCAL_REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:latest backend:local
+          docker tag ${{ env.LOCAL_REGISTRY }}/${{ env.IMAGE_NAME_FRONTEND }}:latest frontend:local
+          
+          echo "## Images Pulled" >> $GITHUB_STEP_SUMMARY
+          echo "- backend:local" >> $GITHUB_STEP_SUMMARY
+          echo "- frontend:local" >> $GITHUB_STEP_SUMMARY
+
+      - name: Cleanup Local Registry
+        if: inputs.action == 'cleanup'
+        run: |
+          # Stop and remove registry
+          docker stop registry || true
+          docker rm registry || true
+          
+          # Remove local images
+          docker rmi ${{ env.LOCAL_REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:latest || true
+          docker rmi ${{ env.LOCAL_REGISTRY }}/${{ env.IMAGE_NAME_FRONTEND }}:latest || true
+          
+          echo "## Cleanup Complete" >> $GITHUB_STEP_SUMMARY
+          echo "Local registry has been removed" >> $GITHUB_STEP_SUMMARY

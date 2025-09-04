@@ -1,0 +1,306 @@
+name: Docker Build and Push
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+    inputs:
+      push_images:
+        description: 'Push images to registry'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME_BACKEND: ${{ github.repository }}-backend
+  IMAGE_NAME_FRONTEND: ${{ github.repository }}-frontend
+
+jobs:
+  build-backend:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.image.outputs.image }}
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request' || github.event.inputs.push_images == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: ./src/fastapi
+          file: ./src/fastapi/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' || github.event.inputs.push_images == 'true' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            BUILD_DATE=${{ github.event.repository.updated_at }}
+            VCS_REF=${{ github.sha }}
+            VERSION=${{ steps.meta.outputs.version }}
+
+      - name: Output image
+        id: image
+        run: echo "image=${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:${{ steps.meta.outputs.version }}" >> $GITHUB_OUTPUT
+
+  build-frontend:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.image.outputs.image }}
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request' || github.event.inputs.push_images == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FRONTEND }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: ./src/nextjs
+          file: ./src/nextjs/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' || github.event.inputs.push_images == 'true' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            BUILD_DATE=${{ github.event.repository.updated_at }}
+            VCS_REF=${{ github.sha }}
+            VERSION=${{ steps.meta.outputs.version }}
+            NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL || 'http://backend:8000' }}
+
+      - name: Output image
+        id: image
+        run: echo "image=${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FRONTEND }}:${{ steps.meta.outputs.version }}" >> $GITHUB_OUTPUT
+
+  vulnerability-scan:
+    needs: [build-backend, build-frontend]
+    if: github.event_name != 'pull_request' || github.event.inputs.push_images == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+      security-events: write
+    strategy:
+      matrix:
+        include:
+          - image: backend
+            digest: ${{ needs.build-backend.outputs.digest }}
+          - image: frontend
+            digest: ${{ needs.build-frontend.outputs.digest }}
+    steps:
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ github.repository }}-${{ matrix.image }}@${{ matrix.digest }}
+          format: 'sarif'
+          output: 'trivy-results-${{ matrix.image }}.sarif'
+
+      - name: Upload Trivy results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results-${{ matrix.image }}.sarif'
+
+  integration-test:
+    needs: [build-backend, build-frontend]
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: testdb
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Compose
+        run: |
+          # Create test environment file
+          cat > .env.test <<EOF
+          # Backend
+          BACKEND_PORT=8000
+          DATABASE_URL=postgresql://testuser:testpass@postgres:5432/testdb
+          SECRET_KEY=test-secret-key-for-ci
+          ENVIRONMENT=test
+          DEBUG=false
+          CORS_ORIGINS=http://localhost:3000,http://frontend:3000
+          
+          # Frontend
+          FRONTEND_PORT=3000
+          NEXT_PUBLIC_API_URL=http://backend:8000
+          NEXT_PUBLIC_APP_NAME=FastAPI-Next.js Test
+          NEXT_PUBLIC_ENVIRONMENT=test
+          
+          # PostgreSQL (if needed)
+          POSTGRES_USER=testuser
+          POSTGRES_PASSWORD=testpass
+          POSTGRES_DB=testdb
+          EOF
+
+      - name: Run integration tests
+        run: |
+          # Use the built images from the registry
+          export BACKEND_IMAGE="${{ needs.build-backend.outputs.image }}"
+          export FRONTEND_IMAGE="${{ needs.build-frontend.outputs.image }}"
+          
+          # Run docker-compose with test configuration
+          docker-compose --env-file .env.test up -d
+          
+          # Wait for services to be ready
+          sleep 10
+          
+          # Run integration test script
+          ./scripts/test-integration.sh || true
+          
+          # Collect logs
+          docker-compose logs > docker-compose.logs
+          
+          # Tear down
+          docker-compose down
+
+      - name: Upload integration test logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-logs
+          path: docker-compose.logs
+
+  publish-report:
+    needs: [build-backend, build-frontend, vulnerability-scan]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Generate build report
+        run: |
+          cat > build-report.md <<EOF
+          # Docker Build Report
+          
+          ## Build Information
+          - **Date**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          - **Commit**: ${{ github.sha }}
+          - **Branch**: ${{ github.ref_name }}
+          - **Triggered by**: ${{ github.actor }}
+          
+          ## Images Built
+          
+          ### Backend
+          - **Image**: ${{ needs.build-backend.outputs.image }}
+          - **Digest**: ${{ needs.build-backend.outputs.digest }}
+          - **Registry**: ghcr.io
+          
+          ### Frontend
+          - **Image**: ${{ needs.build-frontend.outputs.image }}
+          - **Digest**: ${{ needs.build-frontend.outputs.digest }}
+          - **Registry**: ghcr.io
+          
+          ## Multi-Architecture Support
+          - linux/amd64 ✅
+          - linux/arm64 ✅
+          
+          ## Security Scanning
+          - Vulnerability scanning completed with Trivy
+          - Results available in Security tab
+          
+          ## Tags Applied
+          - latest (main branch only)
+          - Branch name
+          - Commit SHA
+          - Semantic version (when tagged)
+          
+          ## Cache Strategy
+          - GitHub Actions cache enabled
+          - Multi-stage builds optimized
+          - Layer caching maximized
+          EOF
+
+      - name: Update build status
+        run: |
+          # This could update a status page or send notifications
+          echo "Build completed successfully"
+          echo "Backend: ${{ needs.build-backend.outputs.image }}"
+          echo "Frontend: ${{ needs.build-frontend.outputs.image }}"

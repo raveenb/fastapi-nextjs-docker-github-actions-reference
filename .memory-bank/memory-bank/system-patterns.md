@@ -1,11 +1,29 @@
 # System Patterns and Implementation Sequence
 
+## CRITICAL DEVELOPMENT RULES (HIGH PRIORITY)
+
+### Documentation Requirements
+**MANDATORY**: You MUST use the context7 MCP server to fetch documentation for any package/library you are working with. This ensures version-specific accuracy.
+
+1. **Always check package versions** from:
+   - Python: `pyproject.toml`, `requirements.txt`, `uv.lock`
+   - JavaScript/TypeScript: `package.json`, `pnpm-lock.yaml`, `package-lock.json`, `yarn.lock`
+   - Other: Language-specific lock files
+
+2. **Use context7 workflow**:
+   - First: Call `mcp__context7__resolve-library-id` with the package name
+   - Then: Call `mcp__context7__get-library-docs` with the resolved ID and version
+   - This ensures you're using documentation matching the exact version in use
+
+3. **Never assume** API compatibility across versions - always verify with version-specific docs
+
 ## Implementation Philosophy
 - **Incremental Development**: Build in small, testable increments
 - **Early Integration**: Get end-to-end connectivity working quickly
 - **Test-Driven**: Add tests as soon as there's something to test
 - **Documentation-Driven**: Document decisions and patterns as we go
 - **Dependency-Aware**: Complete prerequisites before dependent tasks
+- **Version-Specific Documentation**: Always use context7 for accurate library docs
 
 ## Phase 1: Foundation (Tasks 1-3)
 **Goal**: Establish project structure and documentation
@@ -148,8 +166,12 @@ All → Documentation (ongoing)
 - Don't create features without tests
 - Don't deploy without monitoring
 - Don't skip documentation
+- **Don't use outdated or wrong version documentation**
+- **Don't assume library APIs without checking version-specific docs**
 
 ## Best Practices to Follow
+- **Always use context7 MCP server for library documentation**
+- **Check exact package versions before coding**
 - Commit early and often
 - Write tests as you code
 - Use environment variables for config
@@ -158,3 +180,4 @@ All → Documentation (ongoing)
 - Keep services loosely coupled
 - Make everything observable
 - Automate everything possible
+- Verify library API compatibility with installed versions

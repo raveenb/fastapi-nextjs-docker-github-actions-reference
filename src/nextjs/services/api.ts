@@ -1,10 +1,10 @@
-import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse, AxiosError } from "axios";
+import axios, { AxiosInstance, AxiosRequestConfig, AxiosError } from "axios";
 
 export interface ApiError {
   message: string;
   status?: number;
   code?: string;
-  details?: any;
+  details?: unknown;
 }
 
 class ApiClient {
@@ -50,8 +50,8 @@ class ApiClient {
         };
 
         if (error.response?.data) {
-          const data = error.response.data as any;
-          apiError.message = data.detail || data.message || apiError.message;
+          const data = error.response.data as Record<string, unknown>;
+          apiError.message = (data.detail as string) || (data.message as string) || apiError.message;
           apiError.details = data;
         } else if (error.request) {
           apiError.message = "Network error - please check your connection";
@@ -88,17 +88,17 @@ class ApiClient {
     return response.data;
   }
 
-  public async post<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
+  public async post<T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
     const response = await this.instance.post<T>(url, data, config);
     return response.data;
   }
 
-  public async put<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
+  public async put<T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
     const response = await this.instance.put<T>(url, data, config);
     return response.data;
   }
 
-  public async patch<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
+  public async patch<T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
     const response = await this.instance.patch<T>(url, data, config);
     return response.data;
   }

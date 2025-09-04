@@ -63,3 +63,19 @@
   - Consistent with modern project structures
   - Easy to locate application code
   - Docker and infrastructure configs remain at root level
+
+## Mandatory Use of context7 MCP Server for Documentation
+- **Date:** 2025-09-04 10:30:32 AM
+- **Author:** Unknown User
+- **Context:** During development, we identified potential issues with using incorrect or outdated library documentation, which could lead to API mismatches and bugs. The context7 MCP server provides version-specific documentation for libraries.
+- **Decision:** Made it MANDATORY to use context7 MCP server for fetching documentation of any package/library being worked on. Must check exact versions from lock files (pyproject.toml, package.json, pnpm-lock.yaml, etc.) and fetch version-specific documentation.
+- **Alternatives Considered:** 
+  - Rely on general online documentation
+  - Use cached/local documentation
+  - Assume API compatibility across versions
+- **Consequences:** 
+  - Ensures accurate API usage matching installed versions
+  - Prevents version mismatch bugs
+  - Increases development accuracy
+  - Requires additional step in development workflow
+  - Guarantees documentation reliability
