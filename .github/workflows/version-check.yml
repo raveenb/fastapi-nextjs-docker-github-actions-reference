@@ -1,0 +1,177 @@
+name: Version Check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install -g semver @commitlint/cli @commitlint/config-conventional
+
+      - name: Check commit messages
+        id: commits
+        run: |
+          # Get all commits in this PR
+          COMMITS=$(git log origin/${{ github.base_ref }}..HEAD --pretty=format:"%s")
+          
+          # Check if commits follow conventional format
+          INVALID_COMMITS=""
+          while IFS= read -r commit; do
+            if ! echo "$commit" | grep -qE "^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?: .+"; then
+              if [ -n "$commit" ]; then
+                INVALID_COMMITS="${INVALID_COMMITS}\n- ${commit}"
+              fi
+            fi
+          done <<< "$COMMITS"
+          
+          if [ -n "$INVALID_COMMITS" ]; then
+            echo "invalid_commits<<EOF" >> $GITHUB_OUTPUT
+            echo -e "$INVALID_COMMITS" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+            echo "has_invalid=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_invalid=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Predict version bump
+        id: predict
+        run: |
+          # Analyze commits to predict version bump
+          COMMITS=$(git log origin/${{ github.base_ref }}..HEAD --pretty=format:"%s")
+          
+          # Determine bump type
+          BUMP_TYPE="patch"
+          
+          if echo "$COMMITS" | grep -qE "^(BREAKING CHANGE:|feat!:|fix!:)"; then
+            BUMP_TYPE="major"
+            EMOJI="🚀"
+          elif echo "$COMMITS" | grep -qE "^feat(\(.+\))?:"; then
+            BUMP_TYPE="minor"
+            EMOJI="✨"
+          else
+            BUMP_TYPE="patch"
+            EMOJI="🐛"
+          fi
+          
+          # Get current version
+          CURRENT_VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          CURRENT_VERSION=${CURRENT_VERSION#v}
+          
+          # Calculate predicted version
+          PREDICTED_VERSION=$(semver -i "${BUMP_TYPE}" "${CURRENT_VERSION}")
+          
+          echo "current_version=${CURRENT_VERSION}" >> $GITHUB_OUTPUT
+          echo "predicted_version=${PREDICTED_VERSION}" >> $GITHUB_OUTPUT
+          echo "bump_type=${BUMP_TYPE}" >> $GITHUB_OUTPUT
+          echo "emoji=${EMOJI}" >> $GITHUB_OUTPUT
+
+      - name: Comment PR
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            
+            const botComment = comments.find(comment => 
+              comment.user.type === 'Bot' && 
+              comment.body.includes('## 📦 Version Prediction')
+            );
+            
+            const hasInvalid = '${{ steps.commits.outputs.has_invalid }}' === 'true';
+            const invalidCommits = `${{ steps.commits.outputs.invalid_commits }}`;
+            
+            let body = `## 📦 Version Prediction\n\n`;
+            
+            if (hasInvalid) {
+              body += `### ⚠️ Non-Conventional Commits Detected\n\n`;
+              body += `The following commits don't follow the [Conventional Commits](https://www.conventionalcommits.org/) format:\n`;
+              body += `${invalidCommits}\n\n`;
+              body += `Please consider using conventional commit format for better automation:\n`;
+              body += `- \`feat: add new feature\` (triggers minor version bump)\n`;
+              body += `- \`fix: resolve bug\` (triggers patch version bump)\n`;
+              body += `- \`feat!: breaking change\` (triggers major version bump)\n\n`;
+              body += `---\n\n`;
+            }
+            
+            body += `Based on the commits in this PR, the version will be bumped as follows:\n\n`;
+            body += `| Current Version | Predicted Version | Bump Type |\n`;
+            body += `|-----------------|-------------------|----------|\n`;
+            body += `| v${{ steps.predict.outputs.current_version }} | v${{ steps.predict.outputs.predicted_version }} | ${{ steps.predict.outputs.emoji }} ${{ steps.predict.outputs.bump_type }} |\n\n`;
+            
+            body += `### Commit Types in this PR:\n`;
+            
+            const commits = await github.rest.pulls.listCommits({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+            });
+            
+            const commitTypes = {};
+            commits.data.forEach(commit => {
+              const match = commit.commit.message.match(/^(\w+)(\(.+\))?:/);
+              if (match) {
+                const type = match[1];
+                commitTypes[type] = (commitTypes[type] || 0) + 1;
+              }
+            });
+            
+            if (Object.keys(commitTypes).length > 0) {
+              Object.entries(commitTypes).forEach(([type, count]) => {
+                let emoji = '📝';
+                switch(type) {
+                  case 'feat': emoji = '✨'; break;
+                  case 'fix': emoji = '🐛'; break;
+                  case 'docs': emoji = '📚'; break;
+                  case 'test': emoji = '🧪'; break;
+                  case 'chore': emoji = '🔧'; break;
+                  case 'ci': emoji = '👷'; break;
+                  case 'refactor': emoji = '♻️'; break;
+                  case 'perf': emoji = '⚡'; break;
+                  case 'style': emoji = '💄'; break;
+                }
+                body += `- ${emoji} **${type}**: ${count} commit${count > 1 ? 's' : ''}\n`;
+              });
+            } else {
+              body += `- No conventional commits found\n`;
+            }
+            
+            body += `\n---\n`;
+            body += `*This prediction is based on [Conventional Commits](https://www.conventionalcommits.org/). `;
+            body += `The actual version will be determined when this PR is merged to the main branch.*`;
+            
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body
+              });
+            }

@@ -1,0 +1,212 @@
+name: Semantic Version
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      bump_type:
+        description: 'Version bump type'
+        required: false
+        default: 'auto'
+        type: choice
+        options:
+          - auto
+          - patch
+          - minor
+          - major
+          - prerelease
+      prerelease_identifier:
+        description: 'Prerelease identifier (alpha, beta, rc)'
+        required: false
+        default: 'alpha'
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      new_version: ${{ steps.version.outputs.new_version }}
+      previous_version: ${{ steps.version.outputs.previous_version }}
+      release_type: ${{ steps.version.outputs.release_type }}
+      changelog: ${{ steps.version.outputs.changelog }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install semver
+        run: npm install -g semver conventional-changelog-cli @semantic-release/commit-analyzer
+
+      - name: Get current version
+        id: current
+        run: |
+          # Try to get version from git tags
+          CURRENT_VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          CURRENT_VERSION=${CURRENT_VERSION#v}
+          echo "version=${CURRENT_VERSION}" >> $GITHUB_OUTPUT
+          echo "Current version: ${CURRENT_VERSION}"
+
+      - name: Analyze commits
+        id: analyze
+        if: github.event.inputs.bump_type == 'auto' || github.event.inputs.bump_type == ''
+        run: |
+          # Analyze commit messages to determine version bump
+          COMMITS=$(git log $(git describe --tags --abbrev=0 2>/dev/null || echo "")..HEAD --pretty=format:"%s" 2>/dev/null || git log --pretty=format:"%s")
+          
+          # Default to patch
+          BUMP_TYPE="patch"
+          
+          # Check for major version indicators
+          if echo "$COMMITS" | grep -qE "^(BREAKING CHANGE:|feat!:|fix!:)"; then
+            BUMP_TYPE="major"
+          # Check for minor version indicators
+          elif echo "$COMMITS" | grep -qE "^feat(\(.+\))?:"; then
+            BUMP_TYPE="minor"
+          fi
+          
+          echo "bump_type=${BUMP_TYPE}" >> $GITHUB_OUTPUT
+          echo "Detected bump type: ${BUMP_TYPE}"
+
+      - name: Calculate new version
+        id: version
+        run: |
+          CURRENT_VERSION="${{ steps.current.outputs.version }}"
+          
+          # Determine bump type
+          if [ "${{ github.event.inputs.bump_type }}" != "" ] && [ "${{ github.event.inputs.bump_type }}" != "auto" ]; then
+            BUMP_TYPE="${{ github.event.inputs.bump_type }}"
+          else
+            BUMP_TYPE="${{ steps.analyze.outputs.bump_type }}"
+          fi
+          
+          echo "Using bump type: ${BUMP_TYPE}"
+          
+          # Calculate new version
+          if [ "${BUMP_TYPE}" == "prerelease" ]; then
+            NEW_VERSION=$(semver -i prerelease --preid "${{ github.event.inputs.prerelease_identifier }}" "${CURRENT_VERSION}")
+          else
+            NEW_VERSION=$(semver -i "${BUMP_TYPE}" "${CURRENT_VERSION}")
+          fi
+          
+          echo "new_version=${NEW_VERSION}" >> $GITHUB_OUTPUT
+          echo "previous_version=${CURRENT_VERSION}" >> $GITHUB_OUTPUT
+          echo "release_type=${BUMP_TYPE}" >> $GITHUB_OUTPUT
+          echo "New version: ${NEW_VERSION}"
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Generate changelog for the new version
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          
+          echo "## What's Changed" > CHANGELOG_TEMP.md
+          echo "" >> CHANGELOG_TEMP.md
+          
+          # Group commits by type
+          git log ${PREVIOUS_TAG}..HEAD --pretty=format:"%s|%h|%an" | while IFS='|' read -r message hash author; do
+            if [[ $message == feat* ]]; then
+              echo "### ✨ Features" >> CHANGELOG_FEATURES.md
+              echo "- $message ([${hash}](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${hash})) by @${author}" >> CHANGELOG_FEATURES.md
+            elif [[ $message == fix* ]]; then
+              echo "### 🐛 Bug Fixes" >> CHANGELOG_FIXES.md
+              echo "- $message ([${hash}](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${hash})) by @${author}" >> CHANGELOG_FIXES.md
+            elif [[ $message == docs* ]]; then
+              echo "### 📚 Documentation" >> CHANGELOG_DOCS.md
+              echo "- $message ([${hash}](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${hash})) by @${author}" >> CHANGELOG_DOCS.md
+            elif [[ $message == test* ]]; then
+              echo "### 🧪 Tests" >> CHANGELOG_TESTS.md
+              echo "- $message ([${hash}](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${hash})) by @${author}" >> CHANGELOG_TESTS.md
+            elif [[ $message == chore* ]] || [[ $message == ci* ]]; then
+              echo "### 🔧 Maintenance" >> CHANGELOG_MAINTENANCE.md
+              echo "- $message ([${hash}](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${hash})) by @${author}" >> CHANGELOG_MAINTENANCE.md
+            fi
+          done
+          
+          # Combine changelog sections
+          [ -f CHANGELOG_FEATURES.md ] && cat CHANGELOG_FEATURES.md >> CHANGELOG_TEMP.md && echo "" >> CHANGELOG_TEMP.md
+          [ -f CHANGELOG_FIXES.md ] && cat CHANGELOG_FIXES.md >> CHANGELOG_TEMP.md && echo "" >> CHANGELOG_TEMP.md
+          [ -f CHANGELOG_DOCS.md ] && cat CHANGELOG_DOCS.md >> CHANGELOG_TEMP.md && echo "" >> CHANGELOG_TEMP.md
+          [ -f CHANGELOG_TESTS.md ] && cat CHANGELOG_TESTS.md >> CHANGELOG_TEMP.md && echo "" >> CHANGELOG_TEMP.md
+          [ -f CHANGELOG_MAINTENANCE.md ] && cat CHANGELOG_MAINTENANCE.md >> CHANGELOG_TEMP.md && echo "" >> CHANGELOG_TEMP.md
+          
+          echo "**Full Changelog**: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/compare/${PREVIOUS_TAG}...v${{ steps.version.outputs.new_version }}" >> CHANGELOG_TEMP.md
+          
+          # Save changelog to output
+          CHANGELOG=$(cat CHANGELOG_TEMP.md)
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+          # Cleanup
+          rm -f CHANGELOG_*.md
+
+      - name: Create and push tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          NEW_VERSION="${{ steps.version.outputs.new_version }}"
+          git tag -a "v${NEW_VERSION}" -m "Release version ${NEW_VERSION}"
+          git push origin "v${NEW_VERSION}"
+
+      - name: Update version files
+        run: |
+          NEW_VERSION="${{ steps.version.outputs.new_version }}"
+          
+          # Update backend version
+          if [ -f "src/fastapi/pyproject.toml" ]; then
+            sed -i "s/^version = .*/version = \"${NEW_VERSION}\"/" src/fastapi/pyproject.toml
+          fi
+          
+          # Update frontend version
+          if [ -f "src/nextjs/package.json" ]; then
+            npm version "${NEW_VERSION}" --no-git-tag-version --prefix src/nextjs
+          fi
+          
+          # Update docker-compose version
+          if [ -f "docker-compose.yml" ]; then
+            sed -i "s/VERSION:-[0-9.]*/VERSION:-${NEW_VERSION}/" docker-compose.yml
+          fi
+          
+          # Commit version updates if any files changed
+          if git diff --exit-code; then
+            echo "No version files to update"
+          else
+            git add -A
+            git commit -m "chore: bump version to ${NEW_VERSION} [skip ci]"
+            git push
+          fi
+
+      - name: Create GitHub Release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: "v${{ steps.version.outputs.new_version }}"
+          name: "Release v${{ steps.version.outputs.new_version }}"
+          body: ${{ steps.changelog.outputs.changelog }}
+          draft: false
+          prerelease: ${{ steps.version.outputs.release_type == 'prerelease' }}
+          generateReleaseNotes: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Output summary
+        run: |
+          echo "## 🎉 Version Bump Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Previous Version**: ${{ steps.version.outputs.previous_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **New Version**: ${{ steps.version.outputs.new_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Bump Type**: ${{ steps.version.outputs.release_type }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Release created: [v${{ steps.version.outputs.new_version }}](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/v${{ steps.version.outputs.new_version }})" >> $GITHUB_STEP_SUMMARY
