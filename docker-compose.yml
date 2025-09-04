@@ -27,7 +27,7 @@ services:
   # FastAPI Backend Service
   backend:
     build:
-      context: ./src/fastapi
+      context: ./backend
       dockerfile: Dockerfile
       args:
         BUILD_DATE: ${BUILD_DATE:-}
@@ -52,7 +52,7 @@ services:
       postgres:
         condition: service_healthy
     volumes:
-      - ./src/fastapi/app:/app/app:ro
+      - ./backend/app:/app/app:ro
       - backend-logs:/app/logs
     networks:
       - app-network
@@ -67,7 +67,7 @@ services:
   # Next.js Frontend Service
   frontend:
     build:
-      context: ./src/nextjs
+      context: ./frontend
       dockerfile: Dockerfile
       args:
         BUILD_DATE: ${BUILD_DATE:-}
@@ -98,7 +98,7 @@ services:
   # Uncomment for development with hot reload
   # backend-dev:
   #   build:
-  #     context: ./src/fastapi
+  #     context: ./backend
   #     dockerfile: Dockerfile.dev
   #   container_name: fastapi-backend-dev
   #   ports:
@@ -108,7 +108,7 @@ services:
   #     - DEBUG=true
   #     - RELOAD=true
   #   volumes:
-  #     - ./src/fastapi:/app
+  #     - ./backend:/app
   #     - backend-dev-cache:/app/.cache
   #   networks:
   #     - app-network
@@ -116,7 +116,7 @@ services:
 
   # frontend-dev:
   #   build:
-  #     context: ./src/nextjs
+  #     context: ./frontend
   #     dockerfile: Dockerfile.dev
   #   container_name: nextjs-frontend-dev
   #   ports:
@@ -126,7 +126,7 @@ services:
   #     - NEXT_PUBLIC_API_URL=http://localhost:8000
   #     - WATCHPACK_POLLING=true
   #   volumes:
-  #     - ./src/nextjs:/app
+  #     - ./frontend:/app
   #     - /app/node_modules
   #     - /app/.next
   #   depends_on:

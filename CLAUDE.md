@@ -2,6 +2,61 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## CRITICAL RULES (HIGH PRIORITY)
+
+### Documentation Requirements
+**MANDATORY**: You MUST use the context7 MCP server to fetch documentation for any package/library you are working with. This ensures version-specific accuracy.
+
+1. **Always check package versions** from:
+   - Python: `pyproject.toml`, `requirements.txt`, `uv.lock`
+   - JavaScript/TypeScript: `package.json`, `pnpm-lock.yaml`, `package-lock.json`, `yarn.lock`
+   - Other: Language-specific lock files
+
+2. **Use context7 workflow**:
+   - First: Call `mcp__context7__resolve-library-id` with the package name
+   - Then: Call `mcp__context7__get-library-docs` with the resolved ID and version
+   - This ensures you're using documentation matching the exact version in use
+
+3. **Never assume** API compatibility across versions - always verify with version-specific docs
+
+### Code Quality Requirements
+**MANDATORY**: You MUST use these tools for all code changes. Run them before committing.
+
+**Python Projects:**
+1. **Formatting**: `black .` - MUST format all Python code with Black
+2. **Linting**: `ruff check . --fix` - MUST use Ruff with autofix enabled
+3. **Type Checking**: `mypy .` - MUST pass mypy static type checking
+
+**Node.js/TypeScript Projects:**
+1. **Formatting**: `prettier --write .` - MUST format all code with Prettier
+2. **Linting**: `eslint . --fix` - MUST use ESLint with autofix enabled
+3. **Type Checking**: `tsc --noEmit` - MUST pass TypeScript compiler checks
+
+**Workflow:**
+- Format first (black/prettier)
+- Then lint with fixes (ruff/eslint)
+- Finally type check (mypy/tsc)
+- Only commit if all checks pass
+
+### Code Quality Requirements
+**MANDATORY**: You MUST use these tools for all code changes. Run them before committing.
+
+**Python Projects:**
+1. **Formatting**: `black .` - MUST format all Python code with Black
+2. **Linting**: `ruff check . --fix` - MUST use Ruff with autofix enabled
+3. **Type Checking**: `mypy .` - MUST pass mypy static type checking
+
+**JavaScript/TypeScript Projects:**
+1. **Formatting**: `prettier --write .` - MUST format all code with Prettier
+2. **Linting**: `eslint . --fix` - MUST use ESLint with autofix enabled
+3. **Type Checking**: `tsc --noEmit` - MUST pass TypeScript compiler checks
+
+**Workflow:**
+- Format first (black/prettier)
+- Then lint with fixes (ruff/eslint)
+- Finally type check (mypy/tsc)
+- Only commit if all checks pass
+
 ## Project Overview
 
 This is a reference implementation demonstrating best practices for building, testing, and deploying a modern full-stack application using:

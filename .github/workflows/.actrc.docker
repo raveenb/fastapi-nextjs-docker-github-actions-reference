@@ -1,0 +1,10 @@
+# Act configuration for Docker build workflows
+-P ubuntu-latest=catthehacker/ubuntu:act-latest
+-P ubuntu-22.04=catthehacker/ubuntu:act-22.04
+-P ubuntu-20.04=catthehacker/ubuntu:act-20.04
+--container-daemon-socket /var/run/docker.sock
+--container-architecture linux/amd64
+--action-offline-mode
+--workflows .github/workflows/docker-build.yml
+--job build-backend
+--job build-frontend
