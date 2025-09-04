@@ -79,7 +79,7 @@ jobs:
       
       - name: Upload coverage reports
         uses: codecov/codecov-action@v4
-        if: always()
+        if: always() && github.event_name != 'act'
         with:
           file: ./src/fastapi/coverage.xml
           flags: backend
@@ -88,7 +88,7 @@ jobs:
       
       - name: Upload test results
         uses: actions/upload-artifact@v4
-        if: always()
+        if: always() && github.event_name != 'act'
         with:
           name: backend-test-results
           path: |
@@ -140,7 +140,7 @@ jobs:
       
       - name: Upload coverage reports
         uses: codecov/codecov-action@v4
-        if: always()
+        if: always() && github.event_name != 'act'
         with:
           file: ./src/nextjs/coverage/coverage-final.json
           flags: frontend
@@ -149,7 +149,7 @@ jobs:
       
       - name: Upload test results
         uses: actions/upload-artifact@v4
-        if: always()
+        if: always() && github.event_name != 'act'
         with:
           name: frontend-test-results
           path: |
