@@ -1,349 +1,160 @@
-# System Patterns
+# System Patterns and Implementation Sequence
 
-## Overview
-This document defines the coding patterns, conventions, and architectural patterns used throughout the project.
+## Implementation Philosophy
+- **Incremental Development**: Build in small, testable increments
+- **Early Integration**: Get end-to-end connectivity working quickly
+- **Test-Driven**: Add tests as soon as there's something to test
+- **Documentation-Driven**: Document decisions and patterns as we go
+- **Dependency-Aware**: Complete prerequisites before dependent tasks
 
-## Code Style Conventions
+## Phase 1: Foundation (Tasks 1-3)
+**Goal**: Establish project structure and documentation
+- Repository initialization with proper .gitignore
+- Documentation structure (README.md, CLAUDE.md)
+- Memory Bank initialization
+- **Deliverable**: Clean project structure ready for development
 
-### Python (Backend)
-```python
-# File naming: snake_case.py
-# Class naming: PascalCase
-# Function/variable naming: snake_case
-# Constants: UPPER_SNAKE_CASE
+## Phase 2: Backend Setup (Tasks 4-8)
+**Goal**: Minimal working FastAPI application
+- Python project with uv package manager
+- FastAPI with core dependencies (pydantic, loguru, uvicorn)
+- Application structure (routes, models, services)
+- Health check endpoint
+- Configuration management
+- **Deliverable**: Running backend with health endpoint
 
-# Example structure
-from typing import Optional, List
-from pydantic import BaseModel
+## Phase 3: Frontend Setup (Tasks 9-13)
+**Goal**: Minimal working Next.js application
+- Next.js with TypeScript via pnpm
+- Core dependencies (zod, pino)
+- Project structure (components, services, utils)
+- Basic layout and routing
+- Backend connectivity service
+- **Deliverable**: Frontend that can call backend health endpoint
 
-class UserResponse(BaseModel):
-    """User response model with Pydantic validation."""
-    id: int
-    username: str
-    email: str
-    is_active: bool = True
+## Phase 4: Containerization (Tasks 14-18)
+**Goal**: Dockerized development environment
+- Multi-stage Dockerfiles for both services
+- Docker Compose for local development
+- Network configuration
+- Environment variable management
+- End-to-end connectivity testing
+- **Deliverable**: Both services running in containers, communicating
 
-async def get_user_by_id(user_id: int) -> Optional[UserResponse]:
-    """Fetch user by ID with async pattern."""
-    # Implementation
-    pass
+## Phase 5: Core Features (Tasks 19-27)
+**Goal**: Functional application with real features
+- Domain model design (Todo/Task entity)
+- Pydantic models for validation
+- CRUD REST endpoints
+- Database integration
+- SSE streaming endpoint
+- Frontend components for CRUD
+- Zod validation schemas
+- Forms with validation
+- SSE client implementation
+- **Deliverable**: Full-stack CRUD app with real-time updates
+
+## Phase 6: Testing (Tasks 28-34)
+**Goal**: Comprehensive test coverage
+- Pytest setup with coverage
+- Backend unit and integration tests
+- Jest configuration
+- Frontend component tests
+- Cypress E2E tests
+- Test scenarios and fixtures
+- **Deliverable**: >80% test coverage, passing test suites
+
+## Phase 7: CI/CD Pipeline (Tasks 35-40)
+**Goal**: Automated build, test, and release
+- GitHub Actions workflows
+- Docker image building and registry push
+- Act for local CI testing
+- Semantic versioning
+- Automated releases
+- Branch protection rules
+- **Deliverable**: Fully automated pipeline from commit to release
+
+## Phase 8: Infrastructure (Tasks 41-49)
+**Goal**: Cloud-ready deployment configurations
+- Terraform module structure
+- AWS infrastructure (ECS/EKS)
+- GCP infrastructure (Cloud Run/GKE)
+- Digital Ocean Kubernetes
+- OVH configuration
+- Docker Swarm setup
+- Kubernetes manifests
+- Traefik load balancing
+- Helm charts
+- **Deliverable**: Deploy anywhere with Terraform/K8s
+
+## Phase 9: Observability (Tasks 50-55)
+**Goal**: Production-grade monitoring and logging
+- Loguru integration (backend)
+- Pino integration (frontend)
+- OpenTelemetry tracing
+- Prometheus metrics
+- Health/readiness endpoints
+- Log aggregation
+- **Deliverable**: Full observability stack
+
+## Phase 10: Security & Configuration (Tasks 56-58)
+**Goal**: Secure secret and configuration management
+- GitHub Secrets setup
+- CI/CD secret injection
+- Environment-specific configs
+- **Deliverable**: Secure, environment-aware configuration
+
+## Phase 11: Documentation & Polish (Tasks 59-65)
+**Goal**: Production-ready documentation
+- Comprehensive README
+- OpenAPI/Swagger docs
+- Architecture Decision Records
+- Contribution guidelines
+- Issue/PR templates
+- Deployment guide
+- Final validation
+- **Deliverable**: Fully documented, ready-to-use template
+
+## Key Dependencies
+```
+Foundation → Backend/Frontend (can be parallel)
+Backend + Frontend → Containerization
+Containerization → Core Features
+Core Features → Testing
+Testing → CI/CD
+CI/CD → Infrastructure
+Infrastructure → Observability
+All → Documentation (ongoing)
 ```
 
-### TypeScript (Frontend)
-```typescript
-// File naming: PascalCase.tsx for components, camelCase.ts for utilities
-// Component naming: PascalCase
-// Function/variable naming: camelCase
-// Constants: UPPER_SNAKE_CASE
-// Types/Interfaces: PascalCase with 'I' or 'T' prefix
+## Success Metrics Per Phase
+1. **Foundation**: Clean structure, documentation exists
+2. **Backend**: Health endpoint responds with 200
+3. **Frontend**: Page loads, shows backend connectivity
+4. **Containerization**: docker-compose up works
+5. **Core Features**: CRUD operations work, SSE streams data
+6. **Testing**: All tests pass, >80% coverage
+7. **CI/CD**: Automated builds succeed, releases are tagged
+8. **Infrastructure**: Can deploy to at least one cloud
+9. **Observability**: Logs, metrics, and traces are collected
+10. **Security**: No secrets in code, configs are external
+11. **Documentation**: New developer can start in <15 minutes
 
-// Example structure
-import { z } from 'zod';
+## Anti-Patterns to Avoid
+- Don't add complexity before basics work
+- Don't skip testing "to save time"
+- Don't hardcode configuration values
+- Don't commit secrets
+- Don't create features without tests
+- Don't deploy without monitoring
+- Don't skip documentation
 
-export const UserSchema = z.object({
-  id: z.number(),
-  username: z.string(),
-  email: z.string().email(),
-  isActive: z.boolean().default(true),
-});
-
-export type TUser = z.infer<typeof UserSchema>;
-
-export const UserCard: React.FC<{ user: TUser }> = ({ user }) => {
-  // Component implementation
-};
-```
-
-## Architectural Patterns
-
-### API Design Patterns
-
-#### RESTful Endpoints
-```
-GET    /api/v1/users          # List users
-GET    /api/v1/users/{id}     # Get user
-POST   /api/v1/users          # Create user
-PUT    /api/v1/users/{id}     # Update user
-DELETE /api/v1/users/{id}     # Delete user
-```
-
-#### Response Format
-```json
-{
-  "data": {},
-  "meta": {
-    "timestamp": "2025-01-03T00:00:00Z",
-    "version": "1.0.0"
-  },
-  "errors": []
-}
-```
-
-#### Error Response
-```json
-{
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Invalid input data",
-    "details": [
-      {
-        "field": "email",
-        "message": "Invalid email format"
-      }
-    ]
-  },
-  "meta": {
-    "timestamp": "2025-01-03T00:00:00Z",
-    "request_id": "uuid"
-  }
-}
-```
-
-### Frontend Patterns
-
-#### Component Structure
-```
-components/
-├── common/          # Shared components
-├── features/        # Feature-specific components
-├── layouts/         # Layout components
-└── ui/             # Pure UI components
-```
-
-#### Data Fetching Pattern
-```typescript
-// Using TanStack Query
-export const useUser = (userId: string) => {
-  return useQuery({
-    queryKey: ['user', userId],
-    queryFn: () => fetchUser(userId),
-    staleTime: 5 * 60 * 1000, // 5 minutes
-  });
-};
-```
-
-### Database Patterns
-
-#### Repository Pattern
-```python
-class UserRepository:
-    async def get(self, user_id: int) -> Optional[User]:
-        pass
-    
-    async def create(self, user_data: dict) -> User:
-        pass
-    
-    async def update(self, user_id: int, user_data: dict) -> User:
-        pass
-    
-    async def delete(self, user_id: int) -> bool:
-        pass
-```
-
-#### Migration Naming
-```
-YYYYMMDD_HHMMSS_description.py
-20250103_120000_create_users_table.py
-```
-
-### Testing Patterns
-
-#### Test File Naming
-```
-# Python
-test_<module_name>.py
-test_user_service.py
-
-# TypeScript
-<module_name>.test.ts
-<module_name>.spec.ts
-UserCard.test.tsx
-```
-
-#### Test Structure (AAA Pattern)
-```python
-def test_user_creation():
-    # Arrange
-    user_data = {"username": "test", "email": "test@example.com"}
-    
-    # Act
-    user = create_user(user_data)
-    
-    # Assert
-    assert user.username == "test"
-    assert user.email == "test@example.com"
-```
-
-### Docker Patterns
-
-#### Multi-stage Builds
-```dockerfile
-# Build stage
-FROM node:20-alpine AS builder
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci
-COPY . .
-RUN npm run build
-
-# Production stage
-FROM node:20-alpine
-WORKDIR /app
-COPY --from=builder /app/dist ./dist
-EXPOSE 3000
-CMD ["node", "dist/index.js"]
-```
-
-### CI/CD Patterns
-
-#### Branch Strategy
-- `main`: Production-ready code
-- `develop`: Integration branch
-- `feature/*`: Feature branches
-- `hotfix/*`: Emergency fixes
-- `release/*`: Release preparation
-
-#### Commit Message Format
-```
-<type>(<scope>): <subject>
-
-<body>
-
-<footer>
-
-# Types: feat, fix, docs, style, refactor, test, chore
-# Example: feat(auth): add JWT refresh token support
-```
-
-### Security Patterns
-
-#### Environment Variables
-```bash
-# .env.example
-DATABASE_URL=postgresql://user:pass@localhost/db
-JWT_SECRET=your-secret-key
-API_KEY=your-api-key
-REDIS_URL=redis://localhost:6379
-```
-
-#### Authentication Flow
-1. User provides credentials
-2. Server validates and issues JWT + refresh token
-3. Client stores tokens securely
-4. Client includes JWT in Authorization header
-5. Server validates JWT on each request
-6. Client refreshes JWT when expired
-
-### Logging Patterns
-
-#### Log Levels
-- `DEBUG`: Detailed information for debugging
-- `INFO`: General informational messages
-- `WARNING`: Warning messages for potential issues
-- `ERROR`: Error messages for failures
-- `CRITICAL`: Critical failures requiring immediate attention
-
-#### Log Format
-```json
-{
-  "timestamp": "2025-01-03T00:00:00Z",
-  "level": "INFO",
-  "message": "User logged in",
-  "context": {
-    "user_id": "123",
-    "ip": "192.168.1.1",
-    "user_agent": "Mozilla/5.0"
-  },
-  "correlation_id": "uuid",
-  "service": "api"
-}
-```
-
-### Performance Patterns
-
-#### Caching Strategy
-- **Redis**: Session data, frequently accessed data
-- **CDN**: Static assets, images
-- **Browser**: HTTP cache headers
-- **Application**: In-memory caching for hot data
-
-#### Database Optimization
-- Use indexes for frequently queried columns
-- Implement pagination for large datasets
-- Use connection pooling
-- Optimize N+1 queries
-- Use read replicas for read-heavy operations
-
-### Monitoring Patterns
-
-#### Health Checks
-```python
-@app.get("/health")
-async def health_check():
-    return {
-        "status": "healthy",
-        "timestamp": datetime.utcnow(),
-        "version": "1.0.0",
-        "checks": {
-            "database": "ok",
-            "redis": "ok",
-            "disk_space": "ok"
-        }
-    }
-```
-
-#### Metrics to Track
-- Request rate and latency
-- Error rate and types
-- Database query performance
-- Cache hit/miss ratio
-- Memory and CPU usage
-- Active user sessions
-
-## File Organization
-
-### Backend Structure
-```
-backend/
-├── app/
-│   ├── api/           # API endpoints
-│   ├── core/          # Core configuration
-│   ├── crud/          # CRUD operations
-│   ├── db/            # Database config
-│   ├── models/        # SQLAlchemy models
-│   ├── schemas/       # Pydantic schemas
-│   ├── services/      # Business logic
-│   └── utils/         # Utilities
-├── tests/
-├── alembic/           # Database migrations
-└── scripts/           # Utility scripts
-```
-
-### Frontend Structure
-```
-frontend/
-├── src/
-│   ├── app/           # Next.js app directory
-│   ├── components/    # React components
-│   ├── hooks/         # Custom hooks
-│   ├── lib/           # Libraries and utilities
-│   ├── services/      # API services
-│   ├── store/         # State management
-│   ├── styles/        # Global styles
-│   └── types/         # TypeScript types
-├── public/            # Static assets
-└── tests/            # Test files
-```
-
-## Code Review Checklist
-
-- [ ] Code follows style conventions
-- [ ] Tests are included and passing
-- [ ] Documentation is updated
-- [ ] No sensitive data in code
-- [ ] Error handling is implemented
-- [ ] Performance implications considered
-- [ ] Security best practices followed
-- [ ] Accessibility requirements met
-- [ ] Internationalization supported
-- [ ] Logging is appropriate
+## Best Practices to Follow
+- Commit early and often
+- Write tests as you code
+- Use environment variables for config
+- Structure for testability
+- Document decisions as you make them
+- Keep services loosely coupled
+- Make everything observable
+- Automate everything possible
