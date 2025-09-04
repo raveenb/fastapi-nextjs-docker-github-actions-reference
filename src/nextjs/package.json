@@ -1,6 +1,6 @@
 {
   "name": "nextjs-reference",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "Reference Next.js frontend implementation with best practices",
   "private": true,
   "author": "FastAPI Reference Team",

@@ -1,6 +1,6 @@
 [project]
 name = "fastapi-reference"
-version = "0.1.0"
+version = "0.0.1"
 description = "Reference FastAPI backend implementation with best practices"
 readme = "README.md"
 requires-python = ">=3.11"
